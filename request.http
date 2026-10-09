@@ -1,0 +1,49 @@
+@baseUrl = http://localhost:3000/v1/api
+
+### Listar salas
+GET {{baseUrl}}/salas
+
+### Crear sala
+POST {{baseUrl}}/salas
+Content-Type: application/json
+
+{
+    "nombre": "Sala principal",
+    "capacidad": 10
+}
+
+### Listar usuarios
+GET {{baseUrl}}/usuarios
+
+### Crear usuario
+POST {{baseUrl}}/usuarios
+Content-Type: application/json
+
+{
+    "nombres": "Daniel",
+    "correo": "daniel@example.com"
+}
+
+### Listar reservas
+GET {{baseUrl}}/reservas
+
+### Crear reserva: reemplazar los códigos por los devueltos al crear sala y usuario
+# Repetir la misma reserva debe devolver 409 (horario ocupado).
+POST {{baseUrl}}/reservas
+Content-Type: application/json
+
+{
+    "codigoSala": "CODIGO_DE_LA_SALA",
+    "codigoUsuario": "CODIGO_DEL_USUARIO",
+    "fechaInicio": "2026-10-15T09:00:00-05:00",
+    "fechaFin": "2026-10-15T10:00:00-05:00"
+}
+
+### Validación: debe devolver 400
+POST {{baseUrl}}/salas
+Content-Type: application/json
+
+{
+    "nombre": "",
+    "capacidad": 0
+}

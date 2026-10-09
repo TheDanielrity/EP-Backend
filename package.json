@@ -1,0 +1,27 @@
+{
+  "name": "ep-backend",
+  "version": "1.0.0",
+  "description": "",
+  "homepage": "https://github.com/TheDanielrity/EP-Backend#readme",
+  "bugs": {
+    "url": "https://github.com/TheDanielrity/EP-Backend/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheDanielrity/EP-Backend.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node --env-file=.env src/index.js",
+    "dev": "node --env-file=.env --watch-path=src src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "mongodb": "^7.7.0",
+    "mssql": "^12.7.4"
+  }
+}
