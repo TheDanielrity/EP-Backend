@@ -111,6 +111,8 @@ EP-Backend/  (Mythos Coworking API)
 │   ├── utils/                   # ErrorHttp, traducción de errores SQL, auditoría
 │   ├── app.js                   # Configuración de Express
 │   └── index.js                 # Arranque, conexión a bases y cierre ordenado
+├── scripts/
+│   └── db-setup.js              # npm run db:setup: crea las bases sin abrir SSMS
 ├── test/                        # Pruebas con node:test (sin dependencias extra)
 ├── request.http                 # Peticiones listas para REST Client (VS Code)
 ├── docker-compose.yml           # SQL Server + MongoDB para desarrollo (opcional)
@@ -139,16 +141,19 @@ npm install
 cp .env.example .env              # PowerShell: Copy-Item .env.example .env
 #    editar .env con el usuario y la contraseña reales de SQL Server
 
-# 3. Crear la base de datos SQL (desde SSMS / Azure Data Studio, o con sqlcmd)
-sqlcmd -S localhost -U sa -P "<clave>" -C -i database/sqlserver.sql
+# 3. (Opcional) Encender SQL Server y MongoDB con Docker si no están instalados
+docker compose up -d
 
-# 4. (Opcional) Inicializar MongoDB manualmente; la API también lo hace al arrancar
-mongosh "mongodb://127.0.0.1:27017" database/mongodb.js
+# 4. Crear las bases de datos: tablas, índices, vista, SP, datos de ejemplo y colecciones de MongoDB
+npm run db:setup
 
 # 5. Iniciar la API
 npm run dev        # desarrollo, se reinicia al guardar cambios
 npm start          # producción
 ```
+
+`npm run db:setup` es re-ejecutable (vuelve a crear el esquema SQL y sus datos de ejemplo). Como alternativa, el
+mismo `database/sqlserver.sql` se puede ejecutar en SSMS con F5.
 
 La API queda disponible en `http://localhost:3000/api/v1` y su documentación interactiva en
 **`http://localhost:3000/api/v1/docs`** (Swagger UI). Al iniciar, el servidor:
@@ -165,6 +170,7 @@ La API queda disponible en `http://localhost:3000/api/v1` y su documentación in
 | `npm run dev` | Inicia con `--watch` y carga `.env` |
 | `npm start` | Inicia el servidor cargando `.env` |
 | `npm test` | Ejecuta las pruebas automatizadas con `node:test` |
+| `npm run db:setup` | Crea `MythosReservasDB` (ejecuta `database/sqlserver.sql` lote por lote) y prepara `MythosLogs` en MongoDB |
 
 ## Variables de entorno
 
