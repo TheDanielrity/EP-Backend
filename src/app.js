@@ -1,22 +1,30 @@
 import express from 'express';
-import { salas } from './routes/api/salas.js';
-import { usuarios } from './routes/api/usuarios.js';
-import { reservas } from './routes/api/reservas.js';
+import { config } from './config/env.js';
 import { logging } from './middlewares/logging.js';
-import { manejoErrores } from './middlewares/manejoErrores.js';
+import { manejoErrores, rutaNoEncontrada } from './middlewares/manejoErrores.js';
+import { seguridad } from './middlewares/seguridad.js';
+import { apiRouter } from './routes/index.js';
 
+/**
+ * Mythos Coworking - configuración de Express. El orden de los middlewares es importante:
+ * 1. logging     -> registra toda petición, incluso las que terminan en error.
+ * 2. seguridad   -> cabeceras de seguridad y CORS.
+ * 3. express.json-> convierte el cuerpo JSON en req.body (máx. 100 KB).
+ * 4. routers     -> un router por recurso bajo /api/v1.
+ * 5. 404         -> ninguna ruta coincidió.
+ * 6. errores     -> manejador global, siempre al final.
+ */
 export const app = express();
 
+app.disable('x-powered-by');
+app.set('trust proxy', 'loopback');
+
 app.use(logging);
-app.use(express.json());
+app.use(seguridad);
+app.use(express.json({ limit: '100kb' }));
 
-app.use('/v1/api/salas', salas);
-app.use('/v1/api/usuarios', usuarios);
-app.use('/v1/api/reservas', reservas);
+app.get('/', (req, res) => res.redirect(config.prefijoApi));
+app.use(config.prefijoApi, apiRouter);
 
-app.use((req, res) => {
-    res.status(404).json({ mensaje: 'Ruta no encontrada' });
-});
-
-// El middleware de errores se coloca después de todas las rutas.
+app.use(rutaNoEncontrada);
 app.use(manejoErrores);

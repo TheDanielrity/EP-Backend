@@ -1,23 +1,61 @@
-import { registrarEvento } from '../db/mongodb.js';
+import { STATUS_CODES } from 'node:http';
+import { logsRepository } from '../repositories/logsRepository.js';
+import { ErrorHttp } from '../utils/ErrorHttp.js';
+import { mapearErrorSql } from '../utils/erroresSql.js';
 
+/** Ruta inexistente: se ejecuta cuando ningún router respondió. */
+export const rutaNoEncontrada = (req, res, next) => {
+    next(ErrorHttp.noEncontrado(`No existe la ruta ${req.method} ${req.originalUrl}`));
+};
+
+/** Responde 405 e indica en la cabecera Allow los métodos que sí acepta la ruta. */
+export const metodoNoPermitido = (metodos) => (req, res, next) => {
+    res.set('Allow', metodos.join(', '));
+    next(new ErrorHttp(405, `El método ${req.method} no está permitido en esta ruta`));
+};
+
+const clasificar = (error) => {
+    if (error instanceof ErrorHttp) {
+        return { estado: error.estado, mensaje: error.message, detalles: error.detalles };
+    }
+    if (error.type === 'entity.parse.failed') {
+        return { estado: 400, mensaje: 'El cuerpo debe contener un JSON válido' };
+    }
+    if (error.type === 'entity.too.large') {
+        return { estado: 413, mensaje: 'El cuerpo de la petición es demasiado grande' };
+    }
+    const sql = mapearErrorSql(error);
+    if (sql) return sql;
+    return { estado: 500, mensaje: 'Error interno del servidor' };
+};
+
+/**
+ * Manejador global de errores (4 parámetros => Express lo reconoce como tal).
+ * Todas las respuestas de error tienen la misma forma:
+ * { estado, error, mensaje, detalles?, idPeticion }
+ */
 export const manejoErrores = (error, req, res, next) => {
     if (res.headersSent) return next(error);
 
-    if (error.type === 'entity.parse.failed') {
-        return res.status(400).json({ mensaje: 'El cuerpo debe contener un JSON válido' });
-    }
+    const { estado, mensaje, detalles } = clasificar(error);
 
-    const numeroSQL = error.number || error.originalError?.info?.number;
-    const estadosSQL = { 50001: 400, 50002: 404, 50003: 404, 50004: 409, 2601: 409, 2627: 409 };
-    const estado = estadosSQL[numeroSQL] || error.status || 500;
-    void registrarEvento('error', {
-        ruta: req.originalUrl, estado,
-        mensaje: estado >= 500 ? 'Error interno del servidor' : error.message
-    });
-    if (estado >= 500) console.error(error);
+    if (estado >= 500) console.error(`[${req.id}]`, error);
+
+    void logsRepository.registrar('error', {
+        idPeticion: req.id,
+        metodo: req.method,
+        ruta: req.originalUrl,
+        estado,
+        mensaje,
+        ...(detalles && { detalles }),
+        ...(estado >= 500 && { causa: error.message })
+    }, estado >= 500 ? 'error' : 'warn');
 
     res.status(estado).json({
-        mensaje: estado >= 500 ? 'Error interno del servidor' :
-            [2601, 2627].includes(numeroSQL) ? 'El correo ya esta registrado' : error.message
+        estado,
+        error: STATUS_CODES[estado],
+        mensaje,
+        ...(detalles && { detalles }),
+        idPeticion: req.id
     });
 };
