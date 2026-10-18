@@ -7,6 +7,17 @@ almacenados) y **MongoDB** para el histórico de actividad (logs) y los comentar
 
 > Evaluación Parcial · Desarrollo Web Full Stack Backend · Universidad Autónoma del Perú
 
+El proyecto está dividido en **3 repositorios**:
+
+| Repositorio | Contenido |
+| --- | --- |
+| **EP-Backend** (este) | API REST con Node.js + Express |
+| [EP-Backend_BBDD](https://github.com/KlausGatjens/EP-Backend_BBDD) | SQL Server: DDL (tablas, índices, vista, procedimientos), DML (carga inicial) y diagrama |
+| [EP-Backend_MongoDB](https://github.com/KlausGatjens/EP-Backend_MongoDB) | MongoDB: archivo de esquemas y carga inicial (`insertMany`) |
+
+Los repositorios no comparten código: se conectan **a través de las bases de datos**. Los scripts de los
+repositorios BBDD y MongoDB crean la estructura y los datos; la API se conecta a ellas con las variables del `.env`.
+
 ---
 
 ## Caso de negocio
@@ -82,9 +93,6 @@ flowchart LR
 
 ```text
 EP-Backend/  (Mythos Coworking API)
-├── database/
-│   ├── sqlserver.sql            # Tablas 3FN, restricciones, índices, vista, SP y datos de ejemplo
-│   └── mongodb.js               # Script mongosh: colecciones, validadores e índices (opcional)
 ├── docs/
 │   ├── openapi.yaml             # Especificación OpenAPI 3.0 (servida en /api/v1/docs)
 │   └── SUSTENTACION.md          # Guion de demostración y respuestas de metacognición
@@ -112,13 +120,16 @@ EP-Backend/  (Mythos Coworking API)
 │   ├── app.js                   # Configuración de Express
 │   └── index.js                 # Arranque, conexión a bases y cierre ordenado
 ├── scripts/
-│   └── db-setup.js              # npm run db:setup: crea las bases sin abrir SSMS
+│   ├── db-setup.js              # npm run db:setup: crea las bases sin abrir SSMS
+│   └── scriptsBbdd.js           # Ubica los scripts .sql del repositorio EP-Backend_BBDD
 ├── test/                        # Pruebas con node:test (sin dependencias extra)
 ├── request.http                 # Peticiones listas para REST Client (VS Code)
 ├── docker-compose.yml           # SQL Server + MongoDB para desarrollo (opcional)
 ├── .env.example
 └── package.json
 ```
+
+`node_modules/` y `package-lock.json` **no se suben** al repositorio (están en `.gitignore`).
 
 ## Instalación y ejecución
 
@@ -132,8 +143,10 @@ EP-Backend/  (Mythos Coworking API)
 ### Pasos
 
 ```bash
-# 1. Clonar e instalar dependencias
+# 1. Clonar los 3 repositorios en la MISMA carpeta e instalar dependencias
 git clone https://github.com/TheDanielrity/EP-Backend.git
+git clone https://github.com/KlausGatjens/EP-Backend_BBDD.git
+git clone https://github.com/KlausGatjens/EP-Backend_MongoDB.git
 cd EP-Backend
 npm install
 
@@ -144,7 +157,8 @@ cp .env.example .env              # PowerShell: Copy-Item .env.example .env
 # 3. (Opcional) Encender SQL Server y MongoDB con Docker si no están instalados
 docker compose up -d
 
-# 4. Crear las bases de datos: tablas, índices, vista, SP, datos de ejemplo y colecciones de MongoDB
+# 4. Crear las bases de datos: ejecuta los scripts de ../EP-Backend_BBDD (tablas, índices, vista,
+#    SP y datos de ejemplo) y crea las colecciones de MongoDB
 npm run db:setup
 
 # 5. Iniciar la API
@@ -152,8 +166,17 @@ npm run dev        # desarrollo, se reinicia al guardar cambios
 npm start          # producción
 ```
 
-`npm run db:setup` es re-ejecutable (vuelve a crear el esquema SQL y sus datos de ejemplo). Como alternativa, el
-mismo `database/sqlserver.sql` se puede ejecutar en SSMS con F5.
+`npm run db:setup` busca el repositorio EP-Backend_BBDD en la carpeta vecina (`../EP-Backend_BBDD`); si está en
+otro lugar, indicar su ruta en la variable `BBDD_REPO` del `.env`. Es re-ejecutable (vuelve a crear el esquema
+SQL y sus datos de ejemplo).
+
+**Alternativa sin `db:setup`:**
+
+- SQL Server: en SSMS, abrir y ejecutar (F5) en orden los scripts de EP-Backend_BBDD:
+  `DDL/01_creacion_tablas.sql` → `DDL/02_creacion_indices.sql` → `DDL/03_creacion_vista.sql` →
+  `DDL/04_procedimientos_almacenados.sql` → `DML/05_carga_inicial.sql`.
+- MongoDB: la API crea las colecciones al arrancar. También se pueden crear con los scripts de EP-Backend_MongoDB:
+  `mongosh "mongodb://127.0.0.1:27017" esquemas.js` y luego `carga_inicial.js`.
 
 La API queda disponible en `http://localhost:3000/api/v1` y su documentación interactiva en
 **`http://localhost:3000/api/v1/docs`** (Swagger UI). Al iniciar, el servidor:
@@ -170,7 +193,7 @@ La API queda disponible en `http://localhost:3000/api/v1` y su documentación in
 | `npm run dev` | Inicia con `--watch` y carga `.env` |
 | `npm start` | Inicia el servidor cargando `.env` |
 | `npm test` | Ejecuta las pruebas automatizadas con `node:test` |
-| `npm run db:setup` | Crea `MythosReservasDB` (ejecuta `database/sqlserver.sql` lote por lote) y prepara `MythosLogs` en MongoDB |
+| `npm run db:setup` | Crea `MythosReservasDB` (ejecuta lote por lote los scripts DDL y DML de EP-Backend_BBDD) y prepara `MythosLogs` en MongoDB |
 
 ## Variables de entorno
 
@@ -180,12 +203,13 @@ La API queda disponible en `http://localhost:3000/api/v1` y su documentación in
 | `NODE_ENV` | `development` | Entorno de ejecución |
 | `CORS_ORIGIN` | `*` | Origen permitido por CORS |
 | `SQL_SERVER` / `SQL_PORT` | `localhost` / `1433` | Servidor SQL Server |
-| `SQL_DATABASE` | `MythosReservasDB` | Base creada por `database/sqlserver.sql` |
+| `SQL_DATABASE` | `MythosReservasDB` | Base creada por los scripts de EP-Backend_BBDD |
 | `SQL_USER` / `SQL_PASSWORD` | `sa` / `***` | **Obligatorias**. Login SQL |
 | `SQL_ENCRYPT` / `SQL_TRUST_CERTIFICATE` | `false` / `true` | Opciones TLS (en Azure: `true` / `false`) |
 | `MONGO_URI` | `mongodb://127.0.0.1:27017` | Conexión a MongoDB |
 | `MONGO_DATABASE` | `MythosLogs` | Base de logs y comentarios |
 | `MONGO_LOGS_TTL_DIAS` | `90` | Días de retención de logs (índice TTL) |
+| `BBDD_REPO` | *(vacío)* | Opcional, solo para `db:setup`: ruta de EP-Backend_BBDD si no está en `../EP-Backend_BBDD` |
 
 ## Documentación de la API
 
@@ -342,7 +366,9 @@ Todos los errores tienen la **misma forma**, lo que facilita su consumo desde el
 
 ## Persistencia SQL Server
 
-Script: [`database/sqlserver.sql`](database/sqlserver.sql) (re-ejecutable, crea `MythosReservasDB`).
+Scripts: repositorio [EP-Backend_BBDD](https://github.com/KlausGatjens/EP-Backend_BBDD) (re-ejecutables, crean
+`MythosReservasDB`): `DDL/01_creacion_tablas.sql`, `DDL/02_creacion_indices.sql`, `DDL/03_creacion_vista.sql`,
+`DDL/04_procedimientos_almacenados.sql` y `DML/05_carga_inicial.sql`.
 
 ```mermaid
 erDiagram
@@ -407,7 +433,8 @@ comprobar solapamientos. La traducción de códigos SQL → HTTP está en
 
 ## Persistencia NoSQL MongoDB
 
-Base `MythosLogs`, inicializada automáticamente al arrancar (o con [`database/mongodb.js`](database/mongodb.js)).
+Base `MythosLogs`, inicializada automáticamente al arrancar (o con los scripts `esquemas.js` y `carga_inicial.js`
+del repositorio [EP-Backend_MongoDB](https://github.com/KlausGatjens/EP-Backend_MongoDB)).
 
 ### Colección `logs` — esquema flexible
 
@@ -507,7 +534,7 @@ Postman con *Run collection* (cada petición valida su código de estado esperad
 | Persistencia SQL | DB normalizada con relaciones e integridad referencial | 3FN, PK/FK/UNIQUE/CHECK con nombre, índices, vista, SP transaccionales con bloqueo y ROLLBACK |
 | Diseño API REST | Uso correcto de verbos, rutas y códigos de estado | Nivel 2 de Richardson, CRUD completo, sub-recursos, `Location`, `Allow`, 200/201/204/400/404/405/409/503; contrato OpenAPI 3 con Swagger UI |
 | Persistencia NoSQL | MongoDB para logs con diseño óptimo | Esquema flexible validado con `$jsonSchema`, índices compuestos y TTL, auditoría correlacionada, agregaciones, comentarios |
-| Entrega | GitHub sin `node_modules`, script `.sql` y `.env.example` | `.gitignore`, `database/sqlserver.sql`, `.env.example`, colección Postman, `docs/openapi.yaml` |
+| Entrega | GitHub sin `node_modules`, script `.sql` y `.env.example` | 3 repositorios (API, [BBDD](https://github.com/KlausGatjens/EP-Backend_BBDD) con DDL/DML y diagrama, [MongoDB](https://github.com/KlausGatjens/EP-Backend_MongoDB) con esquemas y carga inicial); `.gitignore` sin `node_modules` ni `package-lock.json`; `.env.example`, `request.http`, colección Postman, `docs/openapi.yaml` |
 
 Guion de demostración y preguntas de reflexión: [`docs/SUSTENTACION.md`](docs/SUSTENTACION.md).
 

@@ -2,20 +2,22 @@
  * npm run db:setup
  *
  * Prepara las dos bases de datos de Mythos Coworking sin abrir SSMS:
- *   1. SQL Server: ejecuta database/sqlserver.sql (crea la base, tablas,
- *      restricciones, índices, vista, procedimientos y datos de ejemplo).
+ *   1. SQL Server: ejecuta en orden los scripts del repositorio EP-Backend_BBDD
+ *      (DDL/01 a DDL/04 y DML/05: base, tablas, restricciones, índices, vista,
+ *      procedimientos y datos de ejemplo). Ver scripts/scriptsBbdd.js.
  *   2. MongoDB: crea las colecciones con su validador y sus índices.
  *
  * Usa las credenciales del archivo .env. Es re-ejecutable: vuelve a crear el
  * esquema SQL desde cero (borra los datos anteriores).
  */
 import { readFile } from 'node:fs/promises';
+import path from 'node:path';
 import sql from 'mssql';
 import { config, validarConfig } from '../src/config/env.js';
 import { cerrarMongo, conectarMongo } from '../src/db/mongodb.js';
 import { dividirEnLotes } from '../src/utils/lotesSql.js';
+import { listarScriptsSql, rutaRepoBbdd } from './scriptsBbdd.js';
 
-const RUTA_SCRIPT = new URL('../database/sqlserver.sql', import.meta.url);
 const NOMBRE_EN_SCRIPT = 'MythosReservasDB';
 
 const conexionSql = (database) => ({
@@ -48,8 +50,15 @@ const ejecutarLotes = async (pool, lotes) => {
 
 const prepararSqlServer = async () => {
     const baseDatos = config.sql.database;
-    const script = (await readFile(RUTA_SCRIPT, 'utf8')).replaceAll(NOMBRE_EN_SCRIPT, baseDatos);
-    const lotes = dividirEnLotes(script);
+    const archivos = await listarScriptsSql();
+    console.log(`[SQL Server] Scripts de ${rutaRepoBbdd()}:`);
+    const lotes = [];
+    for (const archivo of archivos) {
+        console.log(`  - ${path.relative(rutaRepoBbdd(), archivo)}`);
+        // Sin la marca BOM (UTF-8) que se agrega para que SSMS lea bien las tildes.
+        const script = (await readFile(archivo, 'utf8')).replace(/^﻿/, '').replaceAll(NOMBRE_EN_SCRIPT, baseDatos);
+        lotes.push(...dividirEnLotes(script));
+    }
 
     // El lote de CREATE DATABASE se ejecuta en master; el lote USE se omite porque
     // el resto se ejecuta con una conexión abierta directamente en la base nueva.

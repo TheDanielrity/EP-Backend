@@ -1,8 +1,13 @@
 /** Pruebas del divisor de lotes usado por npm run db:setup. */
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
+import { listarScriptsSql, rutaRepoBbdd } from '../scripts/scriptsBbdd.js';
 import { dividirEnLotes } from '../src/utils/lotesSql.js';
+
+// Los scripts SQL están en el repositorio EP-Backend_BBDD: la última prueba solo corre si está clonado al lado.
+const sinRepoBbdd = !existsSync(rutaRepoBbdd()) && 'el repositorio EP-Backend_BBDD no está clonado junto a este';
 
 describe('dividirEnLotes', () => {
     it('separa por GO sin importar mayúsculas ni CRLF', () => {
@@ -20,8 +25,10 @@ describe('dividirEnLotes', () => {
         assert.equal(lotes.length, 1);
     });
 
-    it('cada procedimiento del script queda al inicio de su propio lote', async () => {
-        const script = await readFile(new URL('../database/sqlserver.sql', import.meta.url), 'utf8');
+    it('cada procedimiento de los scripts queda al inicio de su propio lote', { skip: sinRepoBbdd }, async () => {
+        const archivos = await listarScriptsSql();
+        const textos = await Promise.all(archivos.map((archivo) => readFile(archivo, 'utf8')));
+        const script = textos.map((texto) => texto.replace(/^﻿/, '')).join('\n');
         // SQL Server admite comentarios antes de la instrucción: se ignoran al comparar.
         const sinComentarios = (l) => l.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*--.*$/gm, '').trim();
         const lotes = dividirEnLotes(script).map(sinComentarios);

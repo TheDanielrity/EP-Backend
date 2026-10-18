@@ -1,6 +1,6 @@
 # Levanta SQL Server y MongoDB en contenedores para desarrollo local.
 #   docker compose up -d
-# Luego: npm run db:setup (crea tablas, SP y datos) y npm run dev.
+# Luego: npm run db:setup (crea tablas, SP y datos con los scripts de EP-Backend_BBDD) y npm run dev.
 # SQL_PASSWORD (en .env) debe tener 8+ caracteres con mayúsculas, minúsculas y números, sin "#".
 services:
   sqlserver:

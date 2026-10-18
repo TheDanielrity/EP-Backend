@@ -4,7 +4,7 @@
 
 | # | Acción | Qué se demuestra | Criterio de la rúbrica |
 | --- | --- | --- | --- |
-| 0 | `npm run db:setup` | Un solo comando crea la base SQL (tablas, SP, datos) y prepara MongoDB | SQL / NoSQL |
+| 0 | `npm run db:setup` | Un solo comando ejecuta los scripts del repositorio EP-Backend_BBDD (tablas, índices, vista, SP, datos) y prepara MongoDB | SQL / NoSQL |
 | 1 | Mostrar `.env.example`, `package.json` (scripts) y `npm run dev` | Entorno profesional; el servidor valida variables y conecta a ambas bases | Arquitectura |
 | 2 | Abrir `src/app.js` y `src/routes/` | Orden de middlewares y un `Router` por recurso | Arquitectura |
 | 3 | `GET /api/v1/salud` | Health check de SQL Server y MongoDB | Arquitectura |
