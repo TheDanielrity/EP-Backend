@@ -1,0 +1,689 @@
+openapi: 3.0.3
+info:
+  title: Mythos Coworking - API de Reservas
+  version: 1.0.0
+  description: |
+    API REST de **Mythos Coworking** para gestionar salas de reuniones, usuarios y reservas.
+
+    - **SQL Server**: usuarios, salas y reservas (3FN, procedimientos almacenados transaccionales).
+    - **MongoDB**: histórico de actividad (logs) y comentarios de las salas.
+
+    Cumple el **Nivel 2 del Modelo de Madurez de Richardson**: recursos identificados por URI,
+    verbos HTTP con su semántica y códigos de estado adecuados. Todas las respuestas de error
+    tienen la forma del esquema `Error` e incluyen el `idPeticion` (cabecera `X-Request-Id`),
+    que permite rastrear la petición en la colección `logs` de MongoDB.
+  license:
+    name: ISC
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Desarrollo local
+tags:
+  - name: Sistema
+    description: Índice de la API y estado de los servicios
+  - name: Salas
+    description: Salas de reuniones (SQL Server)
+  - name: Usuarios
+    description: Usuarios del coworking (SQL Server)
+  - name: Reservas
+    description: Reservas de salas (SQL Server, procedimientos almacenados)
+  - name: Comentarios
+    description: Opiniones y calificaciones de las salas (MongoDB)
+  - name: Logs
+    description: Actividad del sistema (MongoDB)
+
+paths:
+  /:
+    get:
+      tags: [Sistema]
+      summary: Índice de la API
+      operationId: obtenerIndice
+      responses:
+        '200':
+          description: Recursos disponibles
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Indice' }
+
+  /salud:
+    get:
+      tags: [Sistema]
+      summary: Health check de SQL Server y MongoDB
+      operationId: obtenerSalud
+      responses:
+        '200':
+          description: Ambos servicios responden
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Salud' }
+        '503':
+          description: Al menos un servicio no responde
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Salud' }
+
+  /salas:
+    get:
+      tags: [Salas]
+      summary: Listar salas
+      operationId: listarSalas
+      parameters:
+        - name: capacidadMinima
+          in: query
+          description: Solo salas con capacidad mayor o igual
+          schema: { type: integer, minimum: 1 }
+      responses:
+        '200':
+          description: Lista de salas ordenada por nombre
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Sala' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+    post:
+      tags: [Salas]
+      summary: Crear sala
+      operationId: crearSala
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SalaEntrada' }
+      responses:
+        '201':
+          description: Sala creada
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sala' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+        '405': { $ref: '#/components/responses/MetodoNoPermitido' }
+
+  /salas/{codigo}:
+    parameters:
+      - $ref: '#/components/parameters/Codigo'
+    get:
+      tags: [Salas]
+      summary: Obtener sala con su valoración promedio
+      description: Combina el registro de SQL Server con el promedio de calificaciones calculado en MongoDB.
+      operationId: obtenerSala
+      responses:
+        '200':
+          description: Sala encontrada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/SalaDetalle' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+    put:
+      tags: [Salas]
+      summary: Reemplazar datos de la sala
+      operationId: actualizarSala
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SalaEntrada' }
+      responses:
+        '200':
+          description: Sala actualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Sala' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+    delete:
+      tags: [Salas]
+      summary: Eliminar sala
+      description: Devuelve 409 si la sala tiene reservas (FK con ON DELETE NO ACTION).
+      operationId: eliminarSala
+      responses:
+        '204': { description: Sala eliminada }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+
+  /salas/{codigo}/reservas:
+    parameters:
+      - $ref: '#/components/parameters/Codigo'
+    get:
+      tags: [Salas, Reservas]
+      summary: Reservas de una sala
+      operationId: listarReservasDeSala
+      responses:
+        '200':
+          description: Reservas de la sala ordenadas por fecha de inicio
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Reserva' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+  /salas/{codigo}/comentarios:
+    parameters:
+      - $ref: '#/components/parameters/Codigo'
+    get:
+      tags: [Comentarios]
+      summary: Listar comentarios de una sala
+      operationId: listarComentarios
+      responses:
+        '200':
+          description: Comentarios, más recientes primero
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Comentario' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '503': { $ref: '#/components/responses/ServicioNoDisponible' }
+    post:
+      tags: [Comentarios]
+      summary: Comentar y calificar una sala
+      description: Antes de guardar en MongoDB se verifica en SQL Server que la sala y el usuario existan.
+      operationId: crearComentario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ComentarioEntrada' }
+      responses:
+        '201':
+          description: Comentario creado
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Comentario' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '503': { $ref: '#/components/responses/ServicioNoDisponible' }
+
+  /salas/{codigo}/comentarios/{idComentario}:
+    parameters:
+      - $ref: '#/components/parameters/Codigo'
+      - name: idComentario
+        in: path
+        required: true
+        description: ObjectId del comentario
+        schema: { type: string, pattern: '^[0-9a-fA-F]{24}$', example: 6710a1b2c3d4e5f601234567 }
+    delete:
+      tags: [Comentarios]
+      summary: Eliminar comentario
+      operationId: eliminarComentario
+      responses:
+        '204': { description: Comentario eliminado }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '503': { $ref: '#/components/responses/ServicioNoDisponible' }
+
+  /usuarios:
+    get:
+      tags: [Usuarios]
+      summary: Listar usuarios
+      operationId: listarUsuarios
+      responses:
+        '200':
+          description: Lista de usuarios ordenada por nombres
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Usuario' }
+    post:
+      tags: [Usuarios]
+      summary: Crear usuario
+      operationId: crearUsuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UsuarioEntrada' }
+      responses:
+        '201':
+          description: Usuario creado
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+
+  /usuarios/{codigo}:
+    parameters:
+      - $ref: '#/components/parameters/Codigo'
+    get:
+      tags: [Usuarios]
+      summary: Obtener usuario
+      operationId: obtenerUsuario
+      responses:
+        '200':
+          description: Usuario encontrado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+    put:
+      tags: [Usuarios]
+      summary: Reemplazar datos del usuario
+      operationId: actualizarUsuario
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UsuarioEntrada' }
+      responses:
+        '200':
+          description: Usuario actualizado
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Usuario' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+    delete:
+      tags: [Usuarios]
+      summary: Eliminar usuario
+      description: Devuelve 409 si el usuario tiene reservas.
+      operationId: eliminarUsuario
+      responses:
+        '204': { description: Usuario eliminado }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+
+  /usuarios/{codigo}/reservas:
+    parameters:
+      - $ref: '#/components/parameters/Codigo'
+    get:
+      tags: [Usuarios, Reservas]
+      summary: Reservas de un usuario
+      operationId: listarReservasDeUsuario
+      responses:
+        '200':
+          description: Reservas del usuario
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Reserva' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+  /reservas:
+    get:
+      tags: [Reservas]
+      summary: Listar reservas con filtros opcionales
+      operationId: listarReservas
+      parameters:
+        - name: codigoSala
+          in: query
+          schema: { type: string, format: uuid }
+        - name: codigoUsuario
+          in: query
+          schema: { type: string, format: uuid }
+        - name: desde
+          in: query
+          description: Reservas que terminan después de esta fecha (ISO 8601)
+          schema: { type: string, example: '2026-12-01' }
+        - name: hasta
+          in: query
+          description: Reservas que empiezan antes de esta fecha (ISO 8601)
+          schema: { type: string, example: '2026-12-31' }
+      responses:
+        '200':
+          description: Reservas ordenadas por fecha de inicio
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Reserva' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+    post:
+      tags: [Reservas]
+      summary: Registrar reserva
+      description: |
+        Ejecuta el procedimiento almacenado `dbo.RegistrarReserva`, que dentro de una transacción
+        valida las fechas, bloquea la sala, verifica el usuario y rechaza solapamientos.
+      operationId: crearReserva
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReservaEntrada' }
+      responses:
+        '201':
+          description: Reserva registrada
+          headers:
+            Location: { $ref: '#/components/headers/Location' }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reserva' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+
+  /reservas/{codigo}:
+    parameters:
+      - $ref: '#/components/parameters/Codigo'
+    get:
+      tags: [Reservas]
+      summary: Obtener reserva
+      operationId: obtenerReserva
+      responses:
+        '200':
+          description: Reserva encontrada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reserva' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+    put:
+      tags: [Reservas]
+      summary: Reprogramar reserva
+      description: Ejecuta `dbo.ActualizarReserva`; al verificar solapamientos excluye la propia reserva.
+      operationId: actualizarReserva
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ReservaEntrada' }
+      responses:
+        '200':
+          description: Reserva actualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Reserva' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+    delete:
+      tags: [Reservas]
+      summary: Cancelar reserva
+      operationId: eliminarReserva
+      responses:
+        '204': { description: Reserva cancelada }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+
+  /logs:
+    get:
+      tags: [Logs]
+      summary: Consultar logs paginados
+      operationId: listarLogs
+      parameters:
+        - name: tipo
+          in: query
+          description: peticion, auditoria, error, sistema...
+          schema: { type: string, example: auditoria }
+        - name: nivel
+          in: query
+          schema: { type: string, enum: [info, warn, error] }
+        - name: desde
+          in: query
+          schema: { type: string, example: '2026-10-01' }
+        - name: hasta
+          in: query
+          schema: { type: string, example: '2026-10-31' }
+        - name: pagina
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: limite
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Página de logs, más recientes primero
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginaLogs' }
+        '400': { $ref: '#/components/responses/SolicitudInvalida' }
+        '503': { $ref: '#/components/responses/ServicioNoDisponible' }
+
+  /logs/resumen:
+    get:
+      tags: [Logs]
+      summary: Resumen de eventos por tipo y nivel
+      description: Pipeline de agregación `$group` → `$project` → `$sort` sobre la colección `logs`.
+      operationId: resumenLogs
+      responses:
+        '200':
+          description: Conteo de eventos
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/ResumenLog' }
+        '503': { $ref: '#/components/responses/ServicioNoDisponible' }
+
+components:
+  parameters:
+    Codigo:
+      name: codigo
+      in: path
+      required: true
+      description: Identificador UUID del recurso
+      schema: { type: string, format: uuid, example: 8f1c0a6b-3d2e-4f10-9a7b-1c2d3e4f5a6b }
+
+  headers:
+    Location:
+      description: URL del recurso creado
+      schema: { type: string, example: /api/v1/salas/8f1c0a6b-3d2e-4f10-9a7b-1c2d3e4f5a6b }
+
+  responses:
+    SolicitudInvalida:
+      description: Datos inválidos, JSON mal formado o identificador con formato incorrecto
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example:
+            estado: 400
+            error: Bad Request
+            mensaje: Los datos enviados no son válidos
+            detalles:
+              - { campo: capacidad, origen: body, mensaje: debe ser un número entero entre 1 y 500 }
+            idPeticion: 3f9d6c1e-2b8a-4c55-9f0e-7a1b2c3d4e5f
+    NoEncontrado:
+      description: El recurso (o uno referenciado) no existe
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { estado: 404, error: Not Found, mensaje: La sala no existe, idPeticion: 3f9d6c1e-2b8a-4c55-9f0e-7a1b2c3d4e5f }
+    Conflicto:
+      description: Dato duplicado, horario ocupado o recurso con registros asociados
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+          example: { estado: 409, error: Conflict, mensaje: La sala ya está reservada en ese horario, idPeticion: 3f9d6c1e-2b8a-4c55-9f0e-7a1b2c3d4e5f }
+    MetodoNoPermitido:
+      description: Verbo no soportado en la ruta (la cabecera Allow indica los permitidos)
+      headers:
+        Allow:
+          schema: { type: string, example: 'GET, POST' }
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ServicioNoDisponible:
+      description: MongoDB no está disponible
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+
+  schemas:
+    Indice:
+      type: object
+      properties:
+        nombre: { type: string, example: Mythos Coworking - API de Reservas }
+        version: { type: string, example: 1.0.0 }
+        recursos:
+          type: object
+          additionalProperties: { type: string }
+
+    Salud:
+      type: object
+      properties:
+        estado: { type: string, enum: [ok, degradado] }
+        servicios:
+          type: object
+          properties:
+            sqlServer: { type: string, enum: [ok, caido] }
+            mongodb: { type: string, enum: [ok, caido] }
+        tiempoActivoSegundos: { type: integer }
+        fecha: { type: string, format: date-time }
+
+    SalaEntrada:
+      type: object
+      additionalProperties: false
+      required: [nombre, capacidad]
+      properties:
+        nombre: { type: string, minLength: 1, maxLength: 100, example: Sala Olimpo }
+        capacidad: { type: integer, minimum: 1, maximum: 500, example: 8 }
+
+    Sala:
+      type: object
+      properties:
+        codigo: { type: string, format: uuid }
+        nombre: { type: string, example: Sala Olimpo }
+        capacidad: { type: integer, example: 8 }
+        fechaCreacion: { type: string, format: date-time }
+
+    SalaDetalle:
+      allOf:
+        - $ref: '#/components/schemas/Sala'
+        - type: object
+          properties:
+            valoracion:
+              type: object
+              nullable: true
+              description: Calculada en MongoDB; null si MongoDB no está disponible
+              properties:
+                promedio: { type: number, nullable: true, example: 4.5 }
+                total: { type: integer, example: 2 }
+
+    UsuarioEntrada:
+      type: object
+      additionalProperties: false
+      required: [nombres, correo]
+      properties:
+        nombres: { type: string, minLength: 1, maxLength: 100, example: Ana Torres }
+        correo: { type: string, format: email, maxLength: 150, example: ana.torres@mythos.pe }
+
+    Usuario:
+      type: object
+      properties:
+        codigo: { type: string, format: uuid }
+        nombres: { type: string, example: Ana Torres }
+        correo: { type: string, format: email, example: ana.torres@mythos.pe }
+        fechaCreacion: { type: string, format: date-time }
+
+    ReservaEntrada:
+      type: object
+      additionalProperties: false
+      required: [codigoSala, codigoUsuario, fechaInicio, fechaFin]
+      properties:
+        codigoSala: { type: string, format: uuid }
+        codigoUsuario: { type: string, format: uuid }
+        fechaInicio: { type: string, format: date-time, example: '2026-12-10T09:00:00-05:00' }
+        fechaFin:
+          type: string
+          format: date-time
+          description: Debe ser posterior a fechaInicio
+          example: '2026-12-10T10:00:00-05:00'
+
+    Reserva:
+      type: object
+      properties:
+        codigo: { type: string, format: uuid }
+        codigoSala: { type: string, format: uuid }
+        nombreSala: { type: string, example: Sala Olimpo }
+        codigoUsuario: { type: string, format: uuid }
+        nombresUsuario: { type: string, example: Ana Torres }
+        fechaInicio: { type: string, format: date-time, example: '2026-12-10T14:00:00.000Z' }
+        fechaFin: { type: string, format: date-time, example: '2026-12-10T15:00:00.000Z' }
+        fechaCreacion: { type: string, format: date-time }
+
+    ComentarioEntrada:
+      type: object
+      additionalProperties: false
+      required: [codigoUsuario, texto, calificacion]
+      properties:
+        codigoUsuario: { type: string, format: uuid }
+        texto: { type: string, minLength: 1, maxLength: 500, example: Excelente iluminación y buena conexión. }
+        calificacion: { type: integer, minimum: 1, maximum: 5, example: 5 }
+        etiquetas:
+          type: array
+          maxItems: 5
+          items: { type: string, maxLength: 30 }
+          example: [wifi, iluminacion]
+
+    Comentario:
+      type: object
+      properties:
+        _id: { type: string, example: 6710a1b2c3d4e5f601234567 }
+        codigoSala: { type: string, format: uuid }
+        autor:
+          type: object
+          properties:
+            codigoUsuario: { type: string, format: uuid }
+            nombres: { type: string, example: Ana Torres }
+        texto: { type: string }
+        calificacion: { type: integer, minimum: 1, maximum: 5 }
+        etiquetas:
+          type: array
+          items: { type: string }
+        fecha: { type: string, format: date-time }
+
+    Log:
+      type: object
+      description: El contenido de `datos` cambia según el tipo de evento (esquema flexible).
+      properties:
+        _id: { type: string }
+        tipo: { type: string, example: auditoria }
+        nivel: { type: string, enum: [info, warn, error] }
+        fecha: { type: string, format: date-time }
+        datos:
+          type: object
+          additionalProperties: true
+          example: { idPeticion: 3f9d6c1e-2b8a-4c55-9f0e-7a1b2c3d4e5f, accion: crear, entidad: reserva, codigo: 6E0B8F2C-1D2A-4F57-9E1A-0B3C4D5E6F70 }
+
+    PaginaLogs:
+      type: object
+      properties:
+        pagina: { type: integer, example: 1 }
+        limite: { type: integer, example: 20 }
+        total: { type: integer, example: 134 }
+        datos:
+          type: array
+          items: { $ref: '#/components/schemas/Log' }
+
+    ResumenLog:
+      type: object
+      properties:
+        tipo: { type: string, example: peticion }
+        nivel: { type: string, example: info }
+        cantidad: { type: integer, example: 120 }
+        ultimo: { type: string, format: date-time }
+
+    Error:
+      type: object
+      required: [estado, error, mensaje, idPeticion]
+      properties:
+        estado: { type: integer, example: 400 }
+        error: { type: string, example: Bad Request }
+        mensaje: { type: string }
+        detalles:
+          type: array
+          items:
+            type: object
+            properties:
+              campo: { type: string }
+              origen: { type: string, enum: [params, query, body] }
+              mensaje: { type: string }
+        idPeticion: { type: string, format: uuid }

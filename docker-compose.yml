@@ -1,0 +1,27 @@
+# Levanta SQL Server y MongoDB en contenedores para desarrollo local.
+#   docker compose up -d
+# Luego: npm run db:setup (crea tablas, SP y datos con los scripts de EP-Backend_BBDD) y npm run dev.
+# SQL_PASSWORD (en .env) debe tener 8+ caracteres con mayúsculas, minúsculas y números, sin "#".
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: mythos-sqlserver
+    environment:
+      ACCEPT_EULA: "Y"
+      MSSQL_SA_PASSWORD: "${SQL_PASSWORD:-Mythos2026Seguro}"
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+
+  mongodb:
+    image: mongo:7
+    container_name: mythos-mongodb
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+
+volumes:
+  sqlserver-data:
+  mongo-data:

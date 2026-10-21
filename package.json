@@ -1,0 +1,38 @@
+{
+  "name": "ep-backend",
+  "version": "1.0.0",
+  "description": "Mythos Coworking: API REST para la gestión de reservas con Express, SQL Server y MongoDB",
+  "keywords": [
+    "express",
+    "rest-api",
+    "sql-server",
+    "mongodb",
+    "reservas",
+    "coworking"
+  ],
+  "homepage": "https://github.com/TheDanielrity/EP-Backend#readme",
+  "bugs": {
+    "url": "https://github.com/TheDanielrity/EP-Backend/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/TheDanielrity/EP-Backend.git"
+  },
+  "license": "ISC",
+  "author": "",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "scripts": {
+    "start": "node --env-file=.env src/index.js",
+    "dev": "node --env-file=.env --watch-path=src src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^5.2.1",
+    "mongodb": "^7.7.0",
+    "mssql": "^12.7.4"
+  }
+}

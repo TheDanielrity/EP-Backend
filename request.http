@@ -1,0 +1,220 @@
+# =============================================================================
+# Mythos Coworking - Pruebas manuales de la API (extensión REST Client de VS Code).
+# Ejecutar en orden: las peticiones de creación guardan los códigos generados
+# en variables (@name) que se reutilizan en las siguientes.
+# =============================================================================
+
+@baseUrl = http://localhost:3000/api/v1
+
+### Índice de la API
+GET {{baseUrl}}
+
+### Health check (200 si SQL Server y MongoDB responden; 503 si alguno falla)
+GET {{baseUrl}}/salud
+
+# -----------------------------------------------------------------------------
+# SALAS
+# -----------------------------------------------------------------------------
+
+### Crear sala -> 201 + cabecera Location
+# @name crearSala
+POST {{baseUrl}}/salas
+Content-Type: application/json
+
+{
+    "nombre": "Sala Apolo",
+    "capacidad": 10
+}
+
+### Listar salas -> 200
+GET {{baseUrl}}/salas
+
+### Filtrar salas por capacidad mínima -> 200
+GET {{baseUrl}}/salas?capacidadMinima=8
+
+### Obtener sala (incluye valoración promedio desde MongoDB) -> 200
+GET {{baseUrl}}/salas/{{crearSala.response.body.codigo}}
+
+### Actualizar sala (reemplazo completo) -> 200
+PUT {{baseUrl}}/salas/{{crearSala.response.body.codigo}}
+Content-Type: application/json
+
+{
+    "nombre": "Sala Apolo",
+    "capacidad": 12
+}
+
+### Nombre duplicado -> 409
+POST {{baseUrl}}/salas
+Content-Type: application/json
+
+{
+    "nombre": "Sala Apolo",
+    "capacidad": 5
+}
+
+### Validación -> 400 con detalle por campo
+POST {{baseUrl}}/salas
+Content-Type: application/json
+
+{
+    "nombre": "",
+    "capacidad": 0
+}
+
+# -----------------------------------------------------------------------------
+# USUARIOS
+# -----------------------------------------------------------------------------
+
+### Crear usuario -> 201
+# @name crearUsuario
+POST {{baseUrl}}/usuarios
+Content-Type: application/json
+
+{
+    "nombres": "Daniel Prado",
+    "correo": "daniel.prado@mythos.pe"
+}
+
+### Listar usuarios -> 200
+GET {{baseUrl}}/usuarios
+
+### Obtener usuario -> 200
+GET {{baseUrl}}/usuarios/{{crearUsuario.response.body.codigo}}
+
+### Correo duplicado -> 409
+POST {{baseUrl}}/usuarios
+Content-Type: application/json
+
+{
+    "nombres": "Otra persona",
+    "correo": "daniel.prado@mythos.pe"
+}
+
+# -----------------------------------------------------------------------------
+# RESERVAS (POST y PUT ejecutan procedimientos almacenados)
+# -----------------------------------------------------------------------------
+
+### Crear reserva -> 201
+# @name crearReserva
+POST {{baseUrl}}/reservas
+Content-Type: application/json
+
+{
+    "codigoSala": "{{crearSala.response.body.codigo}}",
+    "codigoUsuario": "{{crearUsuario.response.body.codigo}}",
+    "fechaInicio": "2026-12-10T09:00:00-05:00",
+    "fechaFin": "2026-12-10T10:00:00-05:00"
+}
+
+### Reserva superpuesta en la misma sala -> 409
+POST {{baseUrl}}/reservas
+Content-Type: application/json
+
+{
+    "codigoSala": "{{crearSala.response.body.codigo}}",
+    "codigoUsuario": "{{crearUsuario.response.body.codigo}}",
+    "fechaInicio": "2026-12-10T09:30:00-05:00",
+    "fechaFin": "2026-12-10T10:30:00-05:00"
+}
+
+### Sala inexistente -> 404
+POST {{baseUrl}}/reservas
+Content-Type: application/json
+
+{
+    "codigoSala": "00000000-0000-4000-8000-000000000000",
+    "codigoUsuario": "{{crearUsuario.response.body.codigo}}",
+    "fechaInicio": "2026-12-11T09:00:00-05:00",
+    "fechaFin": "2026-12-11T10:00:00-05:00"
+}
+
+### Fechas invertidas -> 400
+POST {{baseUrl}}/reservas
+Content-Type: application/json
+
+{
+    "codigoSala": "{{crearSala.response.body.codigo}}",
+    "codigoUsuario": "{{crearUsuario.response.body.codigo}}",
+    "fechaInicio": "2026-12-10T11:00:00-05:00",
+    "fechaFin": "2026-12-10T10:00:00-05:00"
+}
+
+### Listar reservas con filtros -> 200
+GET {{baseUrl}}/reservas?codigoSala={{crearSala.response.body.codigo}}&desde=2026-12-01&hasta=2026-12-31
+
+### Obtener reserva -> 200
+GET {{baseUrl}}/reservas/{{crearReserva.response.body.codigo}}
+
+### Reprogramar reserva -> 200
+PUT {{baseUrl}}/reservas/{{crearReserva.response.body.codigo}}
+Content-Type: application/json
+
+{
+    "codigoSala": "{{crearSala.response.body.codigo}}",
+    "codigoUsuario": "{{crearUsuario.response.body.codigo}}",
+    "fechaInicio": "2026-12-10T15:00:00-05:00",
+    "fechaFin": "2026-12-10T16:00:00-05:00"
+}
+
+### Reservas de una sala (sub-recurso) -> 200
+GET {{baseUrl}}/salas/{{crearSala.response.body.codigo}}/reservas
+
+### Reservas de un usuario (sub-recurso) -> 200
+GET {{baseUrl}}/usuarios/{{crearUsuario.response.body.codigo}}/reservas
+
+### Eliminar sala con reservas -> 409 (integridad referencial)
+DELETE {{baseUrl}}/salas/{{crearSala.response.body.codigo}}
+
+# -----------------------------------------------------------------------------
+# COMENTARIOS (MongoDB)
+# -----------------------------------------------------------------------------
+
+### Comentar una sala -> 201
+# @name crearComentario
+POST {{baseUrl}}/salas/{{crearSala.response.body.codigo}}/comentarios
+Content-Type: application/json
+
+{
+    "codigoUsuario": "{{crearUsuario.response.body.codigo}}",
+    "texto": "Excelente iluminación y buena conexión a internet.",
+    "calificacion": 5,
+    "etiquetas": ["wifi", "iluminacion"]
+}
+
+### Listar comentarios de la sala -> 200
+GET {{baseUrl}}/salas/{{crearSala.response.body.codigo}}/comentarios
+
+### Eliminar comentario -> 204
+DELETE {{baseUrl}}/salas/{{crearSala.response.body.codigo}}/comentarios/{{crearComentario.response.body._id}}
+
+# -----------------------------------------------------------------------------
+# LOGS (MongoDB)
+# -----------------------------------------------------------------------------
+
+### Últimos logs paginados -> 200
+GET {{baseUrl}}/logs?pagina=1&limite=10
+
+### Solo eventos de auditoría -> 200
+GET {{baseUrl}}/logs?tipo=auditoria
+
+### Solo errores y advertencias -> 200
+GET {{baseUrl}}/logs?nivel=warn
+
+### Resumen por tipo y nivel (aggregate) -> 200
+GET {{baseUrl}}/logs/resumen
+
+# -----------------------------------------------------------------------------
+# LIMPIEZA
+# -----------------------------------------------------------------------------
+
+### Cancelar reserva -> 204
+DELETE {{baseUrl}}/reservas/{{crearReserva.response.body.codigo}}
+
+### Eliminar sala (ya sin reservas) -> 204
+DELETE {{baseUrl}}/salas/{{crearSala.response.body.codigo}}
+
+### Eliminar usuario -> 204
+DELETE {{baseUrl}}/usuarios/{{crearUsuario.response.body.codigo}}
+
+
