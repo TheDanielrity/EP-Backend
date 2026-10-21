@@ -102,7 +102,7 @@ EP-Backend/  (Mythos Coworking API)
 │   ├── config/env.js            # Lectura y validación centralizada de variables de entorno
 │   ├── db/
 │   │   ├── sqlserver.js         # Pool de conexiones a SQL Server
-│   │   └── mongodb.js           # Cliente MongoDB, validadores $jsonSchema e índices
+│   │   └── mongodb.js           # Conexión MongoDB y comprobación de colecciones
 │   ├── repositories/            # Acceso a datos (patrón Repository)
 │   │   ├── salasRepository.js
 │   │   ├── usuariosRepository.js
@@ -119,9 +119,6 @@ EP-Backend/  (Mythos Coworking API)
 │   ├── utils/                   # ErrorHttp, traducción de errores SQL, auditoría
 │   ├── app.js                   # Configuración de Express
 │   └── index.js                 # Arranque, conexión a bases y cierre ordenado
-├── scripts/
-│   ├── db-setup.js              # npm run db:setup: crea las bases sin abrir SSMS
-│   └── scriptsBbdd.js           # Ubica los scripts .sql del repositorio EP-Backend_BBDD
 ├── test/                        # Pruebas con node:test (sin dependencias extra)
 ├── request.http                 # Peticiones listas para REST Client (VS Code)
 ├── docker-compose.yml           # SQL Server + MongoDB para desarrollo (opcional)
@@ -135,7 +132,7 @@ EP-Backend/  (Mythos Coworking API)
 
 ### Requisitos
 
-- Node.js 20.6 o superior.
+- Node.js 20.19 o superior, compatible con el driver de MongoDB utilizado.
 - SQL Server con **autenticación SQL (modo mixto)** y **TCP/IP habilitado** en el puerto 1433.
 - MongoDB local (Compass / `mongod`) o una URI de MongoDB Atlas.
 - Opcional: Docker Desktop para levantar ambas bases con `docker compose up -d`.
@@ -143,7 +140,7 @@ EP-Backend/  (Mythos Coworking API)
 ### Pasos
 
 ```bash
-# 1. Clonar los 3 repositorios en la MISMA carpeta e instalar dependencias
+# 1. Clonar los 3 repositorios e instalar las dependencias de la API
 git clone https://github.com/TheDanielrity/EP-Backend.git
 git clone https://github.com/KlausGatjens/EP-Backend_BBDD.git
 git clone https://github.com/KlausGatjens/EP-Backend_MongoDB.git
@@ -157,33 +154,42 @@ cp .env.example .env              # PowerShell: Copy-Item .env.example .env
 # 3. (Opcional) Encender SQL Server y MongoDB con Docker si no están instalados
 docker compose up -d
 
-# 4. Crear las bases de datos: ejecuta los scripts de ../EP-Backend_BBDD (tablas, índices, vista,
-#    SP y datos de ejemplo) y crea las colecciones de MongoDB
-npm run db:setup
+# 4. Preparar SQL Server desde su propio repositorio (requiere sqlcmd)
+cd ../EP-Backend_BBDD
+sqlcmd -S localhost -U sa -C -b -i inicializar.sql
 
-# 5. Iniciar la API
+# 5. Preparar MongoDB desde su propio repositorio
+cd ../EP-Backend_MongoDB
+npm install
+cp .env.example .env              # PowerShell: Copy-Item .env.example .env
+#    editar MONGO_URI y MONGO_DATABASE para que coincidan con la API
+npm start
+
+# 6. Volver al repositorio de la API e iniciarla
+cd ../EP-Backend
 npm run dev        # desarrollo, se reinicia al guardar cambios
 npm start          # producción
 ```
 
-`npm run db:setup` busca el repositorio EP-Backend_BBDD en la carpeta vecina (`../EP-Backend_BBDD`); si está en
-otro lugar, indicar su ruta en la variable `BBDD_REPO` del `.env`. Es re-ejecutable (vuelve a crear el esquema
-SQL y sus datos de ejemplo).
+La preparación de las bases se realiza desde sus propios repositorios. Ajustar los nombres de las
+carpetas si incluyen un sufijo como `-feat-implementacion-`. Copiar `.env.example` solo si no existe
+un `.env` configurado. La inicialización SQL elimina y recrea las tablas y sus datos;
+la de MongoDB conserva los documentos y agrega cuatro logs de ejemplo en cada ejecución.
 
-**Alternativa sin `db:setup`:**
+**Preparación manual de SQL Server:**
 
 - SQL Server: en SSMS, abrir y ejecutar (F5) en orden los scripts de EP-Backend_BBDD:
   `DDL/01_creacion_tablas.sql` → `DDL/02_creacion_indices.sql` → `DDL/03_creacion_vista.sql` →
   `DDL/04_procedimientos_almacenados.sql` → `DML/05_carga_inicial.sql`.
-- MongoDB: la API crea las colecciones al arrancar. También se pueden crear con los scripts de EP-Backend_MongoDB:
-  `mongosh "mongodb://127.0.0.1:27017" esquemas.js` y luego `carga_inicial.js`.
+- MongoDB: ejecutar `npm install` y `npm start` desde EP-Backend_MongoDB,
+  con su archivo `.env` configurado, antes de iniciar la API.
 
 La API queda disponible en `http://localhost:3000/api/v1` y su documentación interactiva en
 **`http://localhost:3000/api/v1/docs`** (Swagger UI). Al iniciar, el servidor:
 
 1. Valida las variables de entorno obligatorias.
 2. Se conecta a SQL Server y a MongoDB (si alguna falla, no arranca y muestra el motivo).
-3. Crea/actualiza en MongoDB las colecciones con su validador y sus índices.
+3. Comprueba que existan las colecciones logs y comentarios; si faltan, indica que debe ejecutarse inicializar.js en EP-Backend_MongoDB.
 4. Registra un evento `sistema` y, con `Ctrl+C`, cierra las conexiones de forma ordenada.
 
 ### Scripts npm
@@ -193,7 +199,6 @@ La API queda disponible en `http://localhost:3000/api/v1` y su documentación in
 | `npm run dev` | Inicia con `--watch` y carga `.env` |
 | `npm start` | Inicia el servidor cargando `.env` |
 | `npm test` | Ejecuta las pruebas automatizadas con `node:test` |
-| `npm run db:setup` | Crea `MythosReservasDB` (ejecuta lote por lote los scripts DDL y DML de EP-Backend_BBDD) y prepara `MythosLogs` en MongoDB |
 
 ## Variables de entorno
 
@@ -208,8 +213,6 @@ La API queda disponible en `http://localhost:3000/api/v1` y su documentación in
 | `SQL_ENCRYPT` / `SQL_TRUST_CERTIFICATE` | `false` / `true` | Opciones TLS (en Azure: `true` / `false`) |
 | `MONGO_URI` | `mongodb://127.0.0.1:27017` | Conexión a MongoDB |
 | `MONGO_DATABASE` | `MythosLogs` | Base de logs y comentarios |
-| `MONGO_LOGS_TTL_DIAS` | `90` | Días de retención de logs (índice TTL) |
-| `BBDD_REPO` | *(vacío)* | Opcional, solo para `db:setup`: ruta de EP-Backend_BBDD si no está en `../EP-Backend_BBDD` |
 
 ## Documentación de la API
 
@@ -433,8 +436,7 @@ comprobar solapamientos. La traducción de códigos SQL → HTTP está en
 
 ## Persistencia NoSQL MongoDB
 
-Base `MythosLogs`, inicializada automáticamente al arrancar (o con los scripts `esquemas.js` y `carga_inicial.js`
-del repositorio [EP-Backend_MongoDB](https://github.com/KlausGatjens/EP-Backend_MongoDB)).
+Base `MythosLogs`, preparada previamente con `inicializar.js` del repositorio [EP-Backend_MongoDB](https://github.com/KlausGatjens/EP-Backend_MongoDB). La API comprueba la conexión y la existencia de las colecciones, sin crear ni modificar validadores o índices.
 
 ### Colección `logs` — esquema flexible
 
@@ -477,7 +479,7 @@ calculado con un pipeline `$match → $group → $project`.
 
 | Colección | Índice | Propósito |
 | --- | --- | --- |
-| logs | `{ fecha: 1 }` TTL | Borra automáticamente logs con más de `MONGO_LOGS_TTL_DIAS` días |
+| logs | `{ fecha: 1 }` TTL | Borra automáticamente logs con más de 90 días (configurado en EP-Backend_MongoDB/esquemas.js) |
 | logs | `{ tipo: 1, fecha: -1 }` | Filtrar por tipo ordenado por fecha (`/logs?tipo=`) |
 | logs | `{ nivel: 1, fecha: -1 }` | Filtrar errores/advertencias recientes |
 | comentarios | `{ codigoSala: 1, fecha: -1 }` | Comentarios de una sala, más recientes primero |

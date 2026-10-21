@@ -30,8 +30,7 @@ export const config = Object.freeze({
     }),
     mongo: Object.freeze({
         uri: process.env.MONGO_URI ?? 'mongodb://127.0.0.1:27017',
-        database: process.env.MONGO_DATABASE ?? 'MythosLogs',
-        diasRetencionLogs: entero(process.env.MONGO_LOGS_TTL_DIAS, 90)
+        database: process.env.MONGO_DATABASE ?? 'MythosLogs'
     })
 });
 

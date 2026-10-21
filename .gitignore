@@ -1,7 +1,7 @@
 # Dependencias (no se suben: se instalan con npm install)
 node_modules/
 package-lock.json
-
+docs/SUSTENTACION.md
 # Variables de entorno (contienen credenciales)
 .env
 .env.*

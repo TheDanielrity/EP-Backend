@@ -217,5 +217,4 @@ DELETE {{baseUrl}}/salas/{{crearSala.response.body.codigo}}
 ### Eliminar usuario -> 204
 DELETE {{baseUrl}}/usuarios/{{crearUsuario.response.body.codigo}}
 
-### Método no permitido -> 405 con cabecera Allow
-PATCH {{baseUrl}}/salas
+
